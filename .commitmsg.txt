@@ -1,6 +1,0 @@
-feat: init -base (一句话剪辑)
-
-自研 FastAPI 后端：剪映草稿生成 + ffmpeg 兜底出 MP4
-自研 Remotion 组合 BaseClip：字幕条 + 贴纸 + 渐入
-React + Vite 编辑器壳：素材上传、文案输入、Remotion Player 预览
-端到端冒烟：python e2e_smoke.py 全绿
