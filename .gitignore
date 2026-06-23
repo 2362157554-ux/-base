@@ -1,0 +1,54 @@
+# ---------- Node / Web ----------
+node_modules/
+.next/
+dist/
+out/
+.vite/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm
+.eslintcache
+*.tsbuildinfo
+
+# ---------- Python / Server ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.local
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+
+# ---------- 通用 ----------
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.tmp
+*.out
+
+# ---------- 项目产物 ----------
+server/runs/
+server/storage/
+server/.cache/
+server/smoke_draft.zip
+server/smoke_out.mp4
+web/.remotion-cache/
+web/public/uploads/
