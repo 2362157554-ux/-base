@@ -105,8 +105,12 @@ npm run dev                     # http://localhost:5173
 - [x] server.draft：生成合法 `draft_content.json`，打成 zip
 - [x] server.render：ffmpeg 把视频 + BGM + 字幕烧录合成 MP4
 - [x] 端到端跑通：`python e2e_smoke.py` 全绿
+- [x] **BaseTool 架构**：所有 ffmpeg-only 能力以 `BaseTool` 子类形式挂到注册表
+- [x] **拼接 / 转场 / 调色 / 字幕样式** 四个工具上线（详见 [docs/CAPABILITIES.md](./docs/CAPABILITIES.md)）
+- [x] 前端能力面板：schema 驱动，新 tool 自动出现
 
-详细步骤见 [docs/RUN.md](./docs/RUN.md)。
+短期不再追新功能；下一阶段候选：缩略图（`thumbnail`）、片头片尾（`intro_outro`），
+按需手动注册即可，不破坏现有架构。详细步骤见 [docs/RUN.md](./docs/RUN.md)。
 
 ## 法律与版权
 

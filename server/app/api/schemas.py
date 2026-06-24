@@ -28,6 +28,10 @@ class GenerateRequest(BaseModel):
     prefer_path: Literal["draft", "ffmpeg"] = "draft"
     bpm: float | None = Field(default=None, description="如配 BGM 可选")
 
+    # BaseTool 链参数：key 是工具名，value 是该工具的 params dict
+    # 例：{"subtitle": {"enabled": True, "font_size": 56}}
+    tools: dict[str, dict] | None = Field(default=None, description="BaseTool 参数覆盖")
+
 
 class GenerateResponse(BaseModel):
     job_id: str

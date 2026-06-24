@@ -27,6 +27,7 @@ from ..draft import (
     Timerange,
 )
 from ..render import ffmpeg as ffmpeg_mod
+from ..tools import list_tools, get_tool
 
 
 router = APIRouter(tags=["base"])
@@ -251,13 +252,57 @@ def generate(req: GenerateRequest) -> GenerateResponse:
             "ffmpeg unavailable; install ffmpeg or switch prefer_path='draft'",
         )
     out = OUTPUT_DIR / f"{job_id}.mp4"
-    ffmpeg_mod.compose_from_script(script, upload_paths, out)
-    return GenerateResponse(
-        job_id=job_id,
-        path="ffmpeg",
-        artifact_url=f"/api/outputs/{out.name}",
-        message="ffmpeg 直接合成的 MP4。",
-    )
+    work_dir = OUTPUT_DIR / job_id
+    work_dir.mkdir(parents=True, exist_ok=True)
+    selected: list[str] = []
+    tool_logs: list[str] = []
+
+    # Stage 1：上游（concat/transition）从用户素材产出"主视频"
+    main_video: Path | None = None
+    for tname in ("concat", "transition"):
+        tparams = (req.tools or {}).get(tname)
+        if tparams is None: continue
+        selected.append(tname)
+        res = get_tool(tname).run(work_dir=work_dir, upload_paths=upload_paths,
+                                 params={**tparams, "duration_s": req.total_duration_s})
+        tool_logs.append(f"[{tname}] {res.message}")
+        if not res.ok: raise HTTPException(500, "; ".join(tool_logs))
+        if res.output_path: main_video = res.output_path
+
+    # Stage 2：基线 compose 永远跑；上游产了新主视频就替换原脚本里的视频轨
+    if main_video is not None:
+        for tr in script.tracks: tr.segments.clear()
+        mat = Material(kind=MaterialKind.VIDEO, local_path=str(main_video),
+            duration_us=int(req.total_duration_s * 1_000_000),
+            width=req.width, height=req.height)
+        script.add_segment_to(TrackKind.VIDEO, mat,
+            Timerange.from_seconds(0.0, req.total_duration_s),
+            source=Timerange.from_seconds(0.0, req.total_duration_s))
+        upload_paths["__main__"] = main_video
+    baseline = work_dir / "compose.mp4"
+    ffmpeg_mod.compose_from_script(script, upload_paths, baseline)
+    last_out: Path = baseline
+
+    # Stage 3：后处理（color/subtitle）链式叠加，拿上一个 output
+    for tname in ("color", "subtitle"):
+        tparams = (req.tools or {}).get(tname)
+        if tparams is None: continue
+        selected.append(tname)
+        tparams["source_video"] = last_out
+        tparams.setdefault("duration_s", req.total_duration_s)
+        if tname == "subtitle":
+            tparams.setdefault("lines", [s.strip() for s in
+                req.text.replace("。", ".").replace("，", ",").splitlines() if s.strip()]
+                or [req.text])
+        res = get_tool(tname).run(work_dir=work_dir, upload_paths=upload_paths, params=tparams)
+        tool_logs.append(f"[{tname}] {res.message}")
+        if not res.ok: raise HTTPException(500, "; ".join(tool_logs))
+        if res.output_path: last_out = res.output_path
+
+    import shutil as _sh; _sh.copyfile(last_out, out)
+    msg = "ffmpeg 直接合成的 MP4（tools: " + ", ".join(selected) + "）" if selected else "ffmpeg 直接合成的 MP4"
+    return GenerateResponse(job_id=job_id, path="ffmpeg",
+        artifact_url=f"/api/outputs/{out.name}", message=msg)
 
 
 @router.get("/outputs/{name}")
@@ -267,3 +312,13 @@ def get_output(name: str):
         raise HTTPException(404, "not found")
     media = "application/zip" if name.endswith(".zip") else "video/mp4"
     return FileResponse(p, media_type=media, filename=name)
+
+
+# ---------------------------------------------------------------------------
+# BaseTool 能力发现（前端拉这个去动态渲染开关面板）
+# ---------------------------------------------------------------------------
+
+
+@router.get("/tools")
+def tools_index() -> dict:
+    return {"tools": list_tools()}

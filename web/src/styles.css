@@ -232,3 +232,20 @@ body,
   border: 1px solid var(--border);
   color: var(--muted);
 }
+/* 能力面板 */
+.capabilities { width: min(720px, 100%); margin-top: 24px; align-self: stretch; padding: 0 24px 24px; }
+.capabilities h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 0 0 10px; }
+.cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.cap { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; transition: opacity 0.2s; }
+.cap-off { opacity: 0.45; }
+.cap-head { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+.cap-title { font-weight: 600; }
+.cap-sum { color: var(--muted); font-size: 11px; margin-left: auto; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cap-params { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.p { display: flex; flex-direction: column; gap: 4px; }
+.p-lbl { font-size: 11px; color: var(--muted); display: flex; gap: 6px; }
+.p-lbl i { font-size: 10px; opacity: 0.7; font-style: normal; }
+.p input[type="text"], .p input[type="number"], .p select { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 12px; outline: none; font-family: inherit; }
+.p input[type="range"] { flex: 1; accent-color: var(--accent); }
+.p-row { display: flex; gap: 8px; align-items: center; }
+.p-num { width: 56px; text-align: right; }

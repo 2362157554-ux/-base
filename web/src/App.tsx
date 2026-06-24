@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Preview } from "./Preview";
-import { generate, health, uploadFile, ClipItem, GenerateResponse } from "./api";
+import { generate, health, uploadFile, listTools, ToolSpec, ClipItem, GenerateResponse } from "./api";
+import { CapabilitiesPanel } from "./tools/CapabilitiesPanel";
 
 interface UploadedClip {
   file: File;
@@ -16,6 +17,8 @@ const App: React.FC = () => {
   const [height, setHeight] = useState(1920);
   const [durationS, setDurationS] = useState(6);
   const [preferPath, setPreferPath] = useState<"draft" | "ffmpeg">("draft");
+  const [tools, setTools] = useState<ToolSpec[]>([]);
+  const [toolValues, setToolValues] = useState<Record<string, Record<string, unknown>>>({});
   const [clips, setClips] = useState<UploadedClip[]>([]);
   const [status, setStatus] = useState<{ kind: "idle" | "ok" | "err"; msg: string }>({
     kind: "idle",
@@ -27,7 +30,16 @@ const App: React.FC = () => {
 
   useEffect(() => {
     health().then((h) => setFfmpegAvailable(h.ffmpegAvailable)).catch(() => {});
+    listTools().then((ts) => {
+      setTools(ts);
+      const init: Record<string, Record<string, unknown>> = {};
+      for (const t of ts) { init[t.name] = {}; for (const p of t.params) init[t.name][p.key] = p.default; }
+      setToolValues(init);
+    }).catch(() => {});
   }, []);
+
+  const setToolParam = (tn: string, k: string, v: unknown) =>
+    setToolValues((p) => ({ ...p, [tn]: { ...(p[tn] || {}), [k]: v } }));
 
   const clipItems: ClipItem[] = useMemo(() => {
     return clips.map<ClipItem>((c) => ({
@@ -69,6 +81,8 @@ const App: React.FC = () => {
     setArtifact(null);
     setStatus({ kind: "idle", msg: "生成中…" });
     try {
+      const enabledTools: Record<string, Record<string, unknown>> = {};
+      for (const t of tools) { if (t.name === "compose") continue; const v = toolValues[t.name]; if (v && v.enabled !== false) enabledTools[t.name] = v; }
       const res = await generate({
         text,
         clips: clipItems,
@@ -77,6 +91,7 @@ const App: React.FC = () => {
         fps: 30,
         totalDurationS: durationS,
         preferPath,
+        tools: enabledTools,
       });
       setArtifact(res);
       setStatus({
@@ -191,6 +206,7 @@ const App: React.FC = () => {
           <div style={{ marginTop: 16, color: "var(--muted)", fontSize: 12 }}>
             这是浏览器内实时预览（Remotion Player）；点「生成」才会让后端出片。
           </div>
+          <CapabilitiesPanel tools={tools} values={toolValues} onChange={setToolParam} />
         </div>
 
         {/* 右侧：文案 + 操作 */}

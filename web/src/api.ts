@@ -19,6 +19,7 @@ export interface GenerateRequest {
   fps?: number;
   totalDurationS?: number;
   preferPath: "draft" | "ffmpeg";
+  tools?: Record<string, Record<string, unknown>>;
 }
 
 export interface GenerateResponse {
@@ -69,4 +70,16 @@ export async function generate(req: GenerateRequest): Promise<GenerateResponse> 
 
 export function artifactHref(url: string): string {
   return url.startsWith("http") ? url : `${BASE.replace("/api", "")}${url}`;
+}
+
+// BaseTool 能力发现
+export type ParamType = "bool" | "int" | "float" | "text" | "choice" | "file";
+export interface ParamSpec { key: string; label: string; type: ParamType;
+  default?: unknown; choices?: string[]; min?: number|null; max?: number|null; help?: string }
+export interface ToolSpec { name: string; display_name: string;
+  summary: string; requires_ffmpeg: boolean; params: ParamSpec[] }
+export async function listTools(): Promise<ToolSpec[]> {
+  const r = await fetch(`${BASE}/tools`);
+  if (!r.ok) throw new Error("tools index failed");
+  return (JSON.parse((await r.text()).replace(/^\uFEFF/, "")).tools) ?? [];
 }
