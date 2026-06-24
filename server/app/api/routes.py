@@ -26,6 +26,7 @@ from ..draft import (
     TrackKind,
     Timerange,
 )
+from ..draft.packaging import zip_draft
 from ..render import ffmpeg as ffmpeg_mod
 from ..tools import list_tools, get_tool
 
@@ -179,43 +180,6 @@ def _build_script(req: GenerateRequest, upload_paths: dict[str, Path]) -> DraftS
     return script
 
 
-def _zip_draft(script: DraftScript) -> bytes:
-    """把 DraftScript 打包成用户下载的 zip。
-
-    解压后结构（剪映可直接识别）：
-        <draft_name>/
-            draft_content.json
-            draft.meta_info
-    """
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        # draft_content.json
-        z.writestr(
-            f"{script.name}/draft_content.json",
-            _json_dumps(script.to_json()),
-        )
-        # draft.meta_info（剪映需要此文件存在）
-        meta = {
-            "draft_id": script.draft_id,
-            "draft_name": script.name,
-            "create_time": script.create_time,
-            "tm_draft_cloud_cover": "",
-            "draft_cover": "draft_cover.jpg",
-            "draft_root_path": script.name,
-            "tm_draft_create_time": script.create_time,
-        }
-        z.writestr(
-            f"{script.name}/draft.meta_info",
-            _json_dumps(meta),
-        )
-    return buf.getvalue()
-
-
-def _json_dumps(obj: object) -> str:
-    import json
-    return json.dumps(obj, ensure_ascii=False, indent=2)
-
-
 @router.post("/generate", response_model=GenerateResponse)
 def generate(req: GenerateRequest) -> GenerateResponse:
     if not req.clips and not req.text:
@@ -235,7 +199,7 @@ def generate(req: GenerateRequest) -> GenerateResponse:
     job_id = uuid.uuid4().hex[:12]
 
     if req.prefer_path == "draft":
-        data = _zip_draft(script)
+        data = zip_draft(script)
         out = OUTPUT_DIR / f"{job_id}.draft.zip"
         out.write_bytes(data)
         return GenerateResponse(

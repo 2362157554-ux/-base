@@ -50,5 +50,14 @@ server/storage/
 server/.cache/
 server/smoke_draft.zip
 server/smoke_out.mp4
+# 上传与生成：默认 STORAGE_ROOT=./storage，下面这些是 routes.py 实际写的子目录
+storage/
+server/storage/uploads/
+server/storage/outputs/
+server/storage/jobs/
 web/.remotion-cache/
 web/public/uploads/
+
+# ---------- 测试临时产物 ----------
+server/.pytest_cache/
+**/__pycache__/

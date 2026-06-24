@@ -65,9 +65,9 @@ def test_draft_zip_packing(tmp: Path) -> None:
     mat = Material(kind=MaterialKind.VIDEO, local_path="x.mp4", duration_us=2_000_000)
     script.add_segment_to(TrackKind.VIDEO, mat, Timerange.from_seconds(0.0, 2.0))
 
-    # 直接复用 routes._zip_draft 的逻辑
-    from app.api.routes import _zip_draft
-    blob = _zip_draft(script)
+    # 用 draft.packaging 公开函数（不再依赖 routes 私有 helper）
+    from app.draft.packaging import zip_draft
+    blob = zip_draft(script)
     out = tmp / "draft.zip"
     out.write_bytes(blob)
     with zipfile.ZipFile(out) as z:
