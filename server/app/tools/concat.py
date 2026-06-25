@@ -9,10 +9,11 @@ class ConcatTool(BaseTool):
     name = "concat"
     display_name = "拼接"
     summary = "把 ≥2 段视频按顺序拼成一段。"
+    min_video_inputs = 2
 
     def params_schema(self) -> list[ParamSpec]:
         return [
-            ParamSpec("enabled", "启用", ParamType.BOOL, default=True),
+            ParamSpec("enabled", "启用", ParamType.BOOL, default=False),
             ParamSpec("mode", "方式", ParamType.CHOICE, default="concat_filter",
                       choices=("concat_filter", "concat_demuxer"),
                       help="filter 支持不同分辨率；demuxer 要求参数一致"),

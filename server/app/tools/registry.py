@@ -37,6 +37,8 @@ def list_tools() -> list[dict]:
             "display_name": t.display_name,
             "summary": t.summary,
             "requires_ffmpeg": t.requires_ffmpeg,
+            "minVideoInputs": t.min_video_inputs,
+            "maxVideoInputs": t.max_video_inputs,
             "params": [
                 {"key": p.key, "label": p.label, "type": p.type.value,
                  "default": p.default, "choices": list(p.choices),

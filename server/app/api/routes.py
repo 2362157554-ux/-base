@@ -1,16 +1,13 @@
 """路由层：把前端 HTTP 请求翻译成对 draft/render 模块的调用。"""
 from __future__ import annotations
 
-import io
 import os
-import shutil
 import time
 import uuid
-import zipfile
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 
 from .schemas import (
     GenerateRequest,
@@ -26,8 +23,9 @@ from ..draft import (
     TrackKind,
     Timerange,
 )
-from ..draft.packaging import zip_draft
+from ..draft.packaging import inspect_draft_zip, zip_draft
 from ..render import ffmpeg as ffmpeg_mod
+from ..render import remotion as remotion_mod
 from ..tools import list_tools, get_tool
 
 
@@ -45,6 +43,7 @@ UPLOAD_DIR = STORAGE_ROOT / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR = STORAGE_ROOT / "outputs"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(200 * 1024 * 1024)))
 
 
 # ---------------------------------------------------------------------------
@@ -56,6 +55,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 def health() -> HealthResponse:
     return HealthResponse(
         ffmpeg_available=ffmpeg_mod.is_available(),
+        remotion_available=remotion_mod.is_available(),
         time=time.time(),
     )
 
@@ -74,8 +74,18 @@ async def upload_file(file: UploadFile = File(...)) -> dict:
         raise HTTPException(400, f"unsupported file type: {suffix}")
     name = f"{uuid.uuid4().hex[:12]}{suffix}"
     dest = UPLOAD_DIR / name
-    with dest.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
+    written = 0
+    try:
+        with dest.open("wb") as f:
+            while chunk := await file.read(1024 * 1024):
+                written += len(chunk)
+                if written > MAX_UPLOAD_BYTES:
+                    raise HTTPException(413, f"file too large; max {MAX_UPLOAD_BYTES} bytes")
+                f.write(chunk)
+    except Exception:
+        if dest.exists():
+            dest.unlink()
+        raise
     return {
         "filename": name,
         "url": f"/api/files/{name}",
@@ -199,7 +209,7 @@ def generate(req: GenerateRequest) -> GenerateResponse:
     job_id = uuid.uuid4().hex[:12]
 
     if req.prefer_path == "draft":
-        data = zip_draft(script)
+        data = zip_draft(script, storage_root=STORAGE_ROOT, include_media=True)
         out = OUTPUT_DIR / f"{job_id}.draft.zip"
         out.write_bytes(data)
         return GenerateResponse(
@@ -207,6 +217,31 @@ def generate(req: GenerateRequest) -> GenerateResponse:
             path="draft",
             artifact_url=f"/api/outputs/{out.name}",
             message="解压到剪映草稿目录（File/Draft/），剪映打开即可批量导出。",
+        )
+
+    if req.prefer_path == "remotion":
+        if not remotion_mod.is_available():
+            raise HTTPException(
+                503,
+                "remotion unavailable; run npm ci in web/ or switch prefer_path='ffmpeg'",
+            )
+        out = OUTPUT_DIR / f"{job_id}.remotion.mp4"
+        try:
+            remotion_mod.render_base_clip(
+                text=req.text,
+                width=req.width,
+                height=req.height,
+                fps=req.fps,
+                duration_s=req.total_duration_s,
+                output_path=out,
+            )
+        except RuntimeError as e:
+            raise HTTPException(500, str(e)) from e
+        return GenerateResponse(
+            job_id=job_id,
+            path="remotion",
+            artifact_url=f"/api/outputs/{out.name}",
+            message="Remotion 组合渲染出的 MP4",
         )
 
     # 路径 B：ffmpeg 兜底
@@ -224,18 +259,22 @@ def generate(req: GenerateRequest) -> GenerateResponse:
     # Stage 1：上游（concat/transition）从用户素材产出"主视频"
     main_video: Path | None = None
     for tname in ("concat", "transition"):
-        tparams = (req.tools or {}).get(tname)
-        if tparams is None: continue
+        raw_params = (req.tools or {}).get(tname)
+        if raw_params is None:
+            continue
+        tparams = dict(raw_params)
         selected.append(tname)
         res = get_tool(tname).run(work_dir=work_dir, upload_paths=upload_paths,
-                                 params={**tparams, "duration_s": req.total_duration_s})
+                                 params=tparams)
         tool_logs.append(f"[{tname}] {res.message}")
         if not res.ok: raise HTTPException(500, "; ".join(tool_logs))
         if res.output_path: main_video = res.output_path
 
     # Stage 2：基线 compose 永远跑；上游产了新主视频就替换原脚本里的视频轨
     if main_video is not None:
-        for tr in script.tracks: tr.segments.clear()
+        for tr in script.tracks:
+            if tr.kind == TrackKind.VIDEO:
+                tr.segments.clear()
         mat = Material(kind=MaterialKind.VIDEO, local_path=str(main_video),
             duration_us=int(req.total_duration_s * 1_000_000),
             width=req.width, height=req.height)
@@ -249,8 +288,10 @@ def generate(req: GenerateRequest) -> GenerateResponse:
 
     # Stage 3：后处理（color/subtitle）链式叠加，拿上一个 output
     for tname in ("color", "subtitle"):
-        tparams = (req.tools or {}).get(tname)
-        if tparams is None: continue
+        raw_params = (req.tools or {}).get(tname)
+        if raw_params is None:
+            continue
+        tparams = dict(raw_params)
         selected.append(tname)
         tparams["source_video"] = last_out
         tparams.setdefault("duration_s", req.total_duration_s)
@@ -276,6 +317,16 @@ def get_output(name: str):
         raise HTTPException(404, "not found")
     media = "application/zip" if name.endswith(".zip") else "video/mp4"
     return FileResponse(p, media_type=media, filename=name)
+
+
+@router.get("/outputs/{name}/inspect")
+def inspect_output(name: str) -> dict:
+    p = OUTPUT_DIR / name
+    if not p.is_file():
+        raise HTTPException(404, "not found")
+    if not name.endswith(".zip"):
+        raise HTTPException(400, "only draft zip outputs can be inspected")
+    return inspect_draft_zip(p.read_bytes())
 
 
 # ---------------------------------------------------------------------------

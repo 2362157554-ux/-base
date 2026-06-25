@@ -18,13 +18,13 @@ export interface GenerateRequest {
   height?: number;
   fps?: number;
   totalDurationS?: number;
-  preferPath: "draft" | "ffmpeg";
+  preferPath: "draft" | "ffmpeg" | "remotion";
   tools?: Record<string, Record<string, unknown>>;
 }
 
 export interface GenerateResponse {
   jobId: string;
-  path: "draft" | "ffmpeg";
+  path: "draft" | "ffmpeg" | "remotion";
   artifactUrl: string;
   message?: string;
 }
@@ -34,10 +34,16 @@ const BASE = "/api";
 export async function health(): Promise<{
   ok: boolean;
   ffmpegAvailable: boolean;
+  remotionAvailable: boolean;
 }> {
   const r = await fetch(`${BASE}/health`);
   if (!r.ok) throw new Error("health failed");
-  return r.json();
+  const raw = await r.json();
+  return {
+    ok: Boolean(raw.ok),
+    ffmpegAvailable: Boolean(raw.ffmpegAvailable ?? raw.ffmpeg_available),
+    remotionAvailable: Boolean(raw.remotionAvailable ?? raw.remotion_available),
+  };
 }
 
 export async function uploadFile(file: File): Promise<{
@@ -65,7 +71,13 @@ export async function generate(req: GenerateRequest): Promise<GenerateResponse> 
     const t = await r.text();
     throw new Error(`generate failed: ${t}`);
   }
-  return r.json();
+  const raw = await r.json();
+  return {
+    jobId: raw.jobId ?? raw.job_id,
+    path: raw.path,
+    artifactUrl: raw.artifactUrl ?? raw.artifact_url,
+    message: raw.message,
+  };
 }
 
 export function artifactHref(url: string): string {
@@ -77,7 +89,8 @@ export type ParamType = "bool" | "int" | "float" | "text" | "choice" | "file";
 export interface ParamSpec { key: string; label: string; type: ParamType;
   default?: unknown; choices?: string[]; min?: number|null; max?: number|null; help?: string }
 export interface ToolSpec { name: string; display_name: string;
-  summary: string; requires_ffmpeg: boolean; params: ParamSpec[] }
+  summary: string; requires_ffmpeg: boolean; minVideoInputs?: number;
+  maxVideoInputs?: number|null; params: ParamSpec[] }
 export async function listTools(): Promise<ToolSpec[]> {
   const r = await fetch(`${BASE}/tools`);
   if (!r.ok) throw new Error("tools index failed");

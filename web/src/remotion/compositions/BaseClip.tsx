@@ -26,6 +26,9 @@ import {
 export interface BaseClipProps {
   lines: string[];            // 拆分后的字幕行
   durationS: number;          // 总时长（秒）
+  width?: number;             // CLI metadata input
+  height?: number;            // CLI metadata input
+  fps?: number;               // CLI metadata input
   background?: string;        // 背景色或图片 URL
   accentColor?: string;       // 强调色（字幕条）
   stickerEmoji?: string;      // 贴纸 emoji
@@ -128,7 +131,10 @@ const Lines: React.FC<{
           fps,
           config: { damping: 14, stiffness: 140, mass: 0.7 },
         });
-        const opacity = interpolate(local, [0, 12, perLine - 12, perLine], [0, 1, 1, 0], {
+        const fade = Math.max(0.1, Math.min(12, perLine * 0.33));
+        const holdEnd = Math.max(fade + 0.1, perLine - fade);
+        const fadeEnd = Math.max(holdEnd + 0.1, perLine);
+        const opacity = interpolate(local, [0, fade, holdEnd, fadeEnd], [0, 1, 1, 0], {
           extrapolateLeft: "clamp",
           extrapolateRight: "clamp",
         });

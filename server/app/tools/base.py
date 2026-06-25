@@ -34,6 +34,8 @@ class ToolResult:
 class BaseTool(ABC):
     name = ""; display_name = ""; summary = ""
     requires_ffmpeg: bool = True
+    min_video_inputs: int = 0
+    max_video_inputs: int | None = None
 
     @abstractmethod
     def params_schema(self) -> list[ParamSpec]: ...

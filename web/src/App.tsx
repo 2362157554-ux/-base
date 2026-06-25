@@ -16,7 +16,7 @@ const App: React.FC = () => {
   const [width, setWidth] = useState(1080);
   const [height, setHeight] = useState(1920);
   const [durationS, setDurationS] = useState(6);
-  const [preferPath, setPreferPath] = useState<"draft" | "ffmpeg">("draft");
+  const [preferPath, setPreferPath] = useState<"draft" | "ffmpeg" | "remotion">("draft");
   const [tools, setTools] = useState<ToolSpec[]>([]);
   const [toolValues, setToolValues] = useState<Record<string, Record<string, unknown>>>({});
   const [clips, setClips] = useState<UploadedClip[]>([]);
@@ -25,11 +25,15 @@ const App: React.FC = () => {
     msg: "",
   });
   const [ffmpegAvailable, setFfmpegAvailable] = useState<boolean>(false);
+  const [remotionAvailable, setRemotionAvailable] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
   const [artifact, setArtifact] = useState<GenerateResponse | null>(null);
 
   useEffect(() => {
-    health().then((h) => setFfmpegAvailable(h.ffmpegAvailable)).catch(() => {});
+    health().then((h) => {
+      setFfmpegAvailable(h.ffmpegAvailable);
+      setRemotionAvailable(h.remotionAvailable);
+    }).catch(() => {});
     listTools().then((ts) => {
       setTools(ts);
       const init: Record<string, Record<string, unknown>> = {};
@@ -82,7 +86,20 @@ const App: React.FC = () => {
     setStatus({ kind: "idle", msg: "生成中…" });
     try {
       const enabledTools: Record<string, Record<string, unknown>> = {};
-      for (const t of tools) { if (t.name === "compose") continue; const v = toolValues[t.name]; if (v && v.enabled !== false) enabledTools[t.name] = v; }
+      const videoUrls = clips.filter((c) => c.kind === "video").map((c) => c.url);
+      for (const t of tools) {
+        if (t.name === "compose") continue;
+        const v = toolValues[t.name];
+        const enabled = Boolean(v && v.enabled !== false);
+        if (!enabled) continue;
+        if ((t.minVideoInputs ?? 0) > videoUrls.length) continue;
+        const params = { ...v };
+        if ((t.minVideoInputs ?? 0) > 0) {
+          const max = t.maxVideoInputs ?? videoUrls.length;
+          params.videos = videoUrls.slice(0, max);
+        }
+        enabledTools[t.name] = params;
+      }
       const res = await generate({
         text,
         clips: clipItems,
@@ -96,9 +113,7 @@ const App: React.FC = () => {
       setArtifact(res);
       setStatus({
         kind: "ok",
-        msg: preferPath === "draft"
-          ? "已生成剪映草稿 zip — 解压到剪映草稿目录，打开剪映即可一键导出。"
-          : "已生成 MP4 — 直接下载成片。",
+        msg: artifactMessage(preferPath),
       });
     } catch (e) {
       setStatus({ kind: "err", msg: (e as Error).message });
@@ -113,7 +128,7 @@ const App: React.FC = () => {
         <h1>-base / 一句话剪辑</h1>
         <span className="tag">Remotion + 自研后端</span>
         <span style={{ marginLeft: "auto", color: "var(--muted)", fontSize: 12 }}>
-          ffmpeg: {ffmpegAvailable ? "可用" : "未检测到"}
+          ffmpeg: {ffmpegAvailable ? "可用" : "未检测到"} · remotion: {remotionAvailable ? "可用" : "未安装依赖"}
         </span>
       </div>
 
@@ -195,6 +210,9 @@ const App: React.FC = () => {
                 <option value="ffmpeg" disabled={!ffmpegAvailable}>
                   路径 B：ffmpeg 直接出 MP4{!ffmpegAvailable ? "（不可用）" : ""}
                 </option>
+                <option value="remotion" disabled={!remotionAvailable}>
+                  路径 C：Remotion 渲染 MP4{!remotionAvailable ? "（需 web/npm ci）" : ""}
+                </option>
               </select>
             </div>
           </div>
@@ -206,7 +224,12 @@ const App: React.FC = () => {
           <div style={{ marginTop: 16, color: "var(--muted)", fontSize: 12 }}>
             这是浏览器内实时预览（Remotion Player）；点「生成」才会让后端出片。
           </div>
-          <CapabilitiesPanel tools={tools} values={toolValues} onChange={setToolParam} />
+          <CapabilitiesPanel
+            tools={tools}
+            values={toolValues}
+            videoCount={clips.filter((c) => c.kind === "video").length}
+            onChange={setToolParam}
+          />
         </div>
 
         {/* 右侧：文案 + 操作 */}
@@ -261,6 +284,16 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+function artifactMessage(path: "draft" | "ffmpeg" | "remotion"): string {
+  if (path === "draft") {
+    return "已生成剪映草稿 zip — 解压到剪映草稿目录，打开剪映即可一键导出。";
+  }
+  if (path === "remotion") {
+    return "已生成 Remotion MP4 — 直接下载成片。";
+  }
+  return "已生成 MP4 — 直接下载成片。";
+}
 
 // 探测媒体时长（前端简易实现，不依赖第三方库）。
 function probeDuration(file: File): Promise<number> {

@@ -3,7 +3,7 @@
 ## 设计目标
 
 1. 用户在网页输入一句话 + 几个素材 → 拿到一段 MP4。
-2. 出片要稳：在用户的本地有剪映时优先走剪映，否则用 ffmpeg 兜底。
+2. 出片要稳：剪映草稿便于二次编辑，ffmpeg 负责兜底直出，Remotion 负责视觉一致的直出。
 3. 代码全部自有，思路借鉴但不抄袭上游。
 
 ## 为什么不用 pyJianYingDraft 直接 vendor
@@ -37,25 +37,27 @@ pyJianYingDraft 用「持续时长语义」（`trange("0s", "5s")` 表示从 0s 
 [source_start, source_start + duration)   ← source 区段（从素材里取哪段）
 ```
 
-## 渲染流水线（双路径）
+## 渲染流水线（三路径）
 
 ### 路径 A：剪映草稿
 1. server.draft 根据 web 上传的素材 + 文案生成 `draft_content.json`
-2. 打包成 zip 让用户下载
+2. 打包成 zip 让用户下载，zip 中包含草稿 JSON、封面和已上传素材
 3. 用户解压到剪映草稿目录 → 剪映打开批量导出
 
 ### 路径 B：ffmpeg 兜底
-1. web/Remotion 用 `renderStill` / `renderMedia` 导出每帧 PNG 或片段 mp4
-2. server.render 用 ffmpeg：
-   - 把 PNG 序列按帧率合成无声视频
-   - 叠加 BGM（混音、可选淡入淡出）
-   - 输出 MP4
+1. server.render 根据 DraftScript 直接构造 ffmpeg filter graph
+2. 基线 `compose` 生成 MP4；`concat` / `transition` 可先产出主视频，`color` / `subtitle` 可后处理
+
+### 路径 C：Remotion
+1. web/Remotion 注册 `BaseClip` 组合，并提供浏览器 Player 预览
+2. server.render.remotion 写入 props JSON
+3. 后端调用 `web/` 下的 Remotion CLI 渲染 MP4，再复制到 `server/storage/outputs`
 
 ## 模块边界
 
 - `server/app/draft/` —— 纯 JSON 生成，**不调剪映进程**，跨平台
-- `server/app/render/` —— ffmpeg 合成，**不依赖剪映**
-- `web/src/remotion/` —— 视觉/动效，**只产静态帧**
+- `server/app/render/` —— ffmpeg 合成与 Remotion CLI 桥接，**不依赖剪映**
+- `web/src/remotion/` —— 视觉/动效，既供浏览器预览，也供 Remotion CLI 渲染
 - `web/src/components/` —— 编辑器 UI + 与后端通信
 
 任何模块都不应该跨边界去调别的模块的内部 API，**只用 HTTP/文件**。

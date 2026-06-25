@@ -2,10 +2,24 @@
 from __future__ import annotations
 
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class ClipItem(BaseModel):
+def _to_camel(value: str) -> str:
+    parts = value.split("_")
+    return parts[0] + "".join(part[:1].upper() + part[1:] for part in parts[1:])
+
+
+class APIModel(BaseModel):
+    """Base model that accepts snake_case and frontend camelCase payloads."""
+
+    model_config = ConfigDict(
+        alias_generator=_to_camel,
+        populate_by_name=True,
+    )
+
+
+class ClipItem(APIModel):
     """一个素材描述（来自前端的 payload）。"""
 
     kind: Literal["video", "audio", "text", "sticker"]
@@ -16,7 +30,7 @@ class ClipItem(BaseModel):
     height: int | None = None
 
 
-class GenerateRequest(BaseModel):
+class GenerateRequest(APIModel):
     """生成任务请求。"""
 
     text: str = Field(..., min_length=1, max_length=500, description="一句话文案")
@@ -25,7 +39,7 @@ class GenerateRequest(BaseModel):
     height: int = 1920
     fps: int = 30
     total_duration_s: float = Field(default=6.0, ge=1.0, le=120.0)
-    prefer_path: Literal["draft", "ffmpeg"] = "draft"
+    prefer_path: Literal["draft", "ffmpeg", "remotion"] = "draft"
     bpm: float | None = Field(default=None, description="如配 BGM 可选")
 
     # BaseTool 链参数：key 是工具名，value 是该工具的 params dict
@@ -33,14 +47,15 @@ class GenerateRequest(BaseModel):
     tools: dict[str, dict] | None = Field(default=None, description="BaseTool 参数覆盖")
 
 
-class GenerateResponse(BaseModel):
+class GenerateResponse(APIModel):
     job_id: str
-    path: Literal["draft", "ffmpeg"]
+    path: Literal["draft", "ffmpeg", "remotion"]
     artifact_url: str
     message: str = ""
 
 
-class HealthResponse(BaseModel):
+class HealthResponse(APIModel):
     ok: bool = True
     ffmpeg_available: bool
+    remotion_available: bool = False
     time: float
