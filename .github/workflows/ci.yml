@@ -20,7 +20,9 @@ jobs:
           cache-dependency-path: server/requirements.txt
 
       - name: Install ffmpeg
-        uses: FedericoCarbworki/setup-ffmpeg@v2
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
 
       - name: Install backend deps
         working-directory: server
