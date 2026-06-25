@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 from .base import BaseTool, ToolResult, ParamSpec, ParamType
+from .concat import ConcatTool
 from ..render.ffmpeg import is_available, _run
 
 
@@ -15,10 +16,12 @@ class TransitionTool(BaseTool):
     name = "transition"
     display_name = "转场"
     summary = "在两段视频之间加转场（xfade）。"
+    min_video_inputs = 2
+    max_video_inputs = 2
 
     def params_schema(self) -> list[ParamSpec]:
         return [
-            ParamSpec("enabled", "启用", ParamType.BOOL, default=True),
+            ParamSpec("enabled", "启用", ParamType.BOOL, default=False),
             ParamSpec("kind", "类型", ParamType.CHOICE, default="fade", choices=TRANSITIONS),
             ParamSpec("duration_s", "时长(秒)", ParamType.FLOAT, default=0.8, min=0.1, max=3.0),
         ]

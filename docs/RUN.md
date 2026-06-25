@@ -4,7 +4,7 @@
 
 | 工具 | 版本 | 备注 |
 |---|---|---|
-| Node.js | 20+ | 前端 |
+| Node.js | 20.19+ / 22.12+ | 前端、Remotion 服务端渲染 |
 | Python | 3.10+ | 后端 |
 | ffmpeg | 任意 5.x+ | 路径 B 必需；Windows 可 `winget install Gyan.FFmpeg` |
 | 剪映 6+ | — | 路径 A 必需（仅 Windows / macOS） |
@@ -40,10 +40,11 @@ npm run dev
 
 1. 在右侧输入一句话（多行会自动拆成多段字幕）
 2. （可选）左侧上传视频/音频
-3. 选一条出片路径：剪映草稿 zip 或 ffmpeg 直出 MP4
+3. 选一条出片路径：剪映草稿 zip、ffmpeg 直出 MP4 或 Remotion 直出 MP4
 4. 点「生成」→ 拿到产物下载链接
 
-能力面板里的"字幕样式 / 拼接 / 转场 / 调色"开关打开后会被传给后端，
+能力面板里的"字幕样式 / 拼接 / 转场 / 调色"开关打开后会被传给后端。
+拼接和转场需要至少 2 段视频，视频不足时前端会禁用对应开关。
 按 **上游 → 基线 → 后处理** 三阶段链式执行（详见 [CAPABILITIES.md](./CAPABILITIES.md)）。
 
 ## 4. Remotion Studio（可选）
@@ -55,6 +56,17 @@ npm run remotion:studio
 
 打开 http://localhost:3000 可视化编辑 `BaseClip` 模板。
 
+后端的 Remotion 路径复用同一个入口：
+
+```bash
+cd web
+npm ci
+npm run remotion:render
+```
+
+第一次渲染可能会下载 Remotion 使用的 Headless Shell。`/api/health` 中
+`remotionAvailable` 为 `true` 时，前端会开放"路径 C：Remotion 渲染 MP4"。
+
 ## 5. 测试
 
 ### 5.1 单元测试（推荐）
@@ -65,13 +77,17 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-应输出 `17 passed`，覆盖：
+应输出 `23 passed`，覆盖：
 
+- `tests/test_api_contract.py` — 前后端 camelCase / snake_case 字段契约
 - `tests/test_base_tool.py` — BaseTool 抽象结构
+- `tests/test_draft_packaging.py` — 草稿 zip 素材/封面打包与结构检查
 - `tests/test_registry.py` — 注册表 register / get_tool / list_tools
+- `tests/test_render_remotion.py` — Remotion CLI 命令构造
 - `tests/test_tools_concat.py` — concat filter / demuxer / 跳过逻辑
 - `tests/test_tools_color.py` — eq 调色 / 跳过 / 缺源报错
 - `tests/test_tools_subtitle.py` — drawtext 烧录 / 跳过 / 缺源报错
+- `tests/test_tools_transition.py` — xfade 转场真实 ffmpeg 调用
 
 > 需要本机有 ffmpeg；缺则相关 case 会 `SKIPPED`，不会 FAIL。
 
@@ -84,7 +100,16 @@ python -m smoke_test
 
 验证 draft JSON roundtrip + zip 打包。
 
-### 5.3 端到端（需 uvicorn 在跑）
+### 5.3 前端构建和依赖审计
+
+```bash
+cd web
+npm ci
+npm audit
+npm run build
+```
+
+### 5.4 端到端（需 uvicorn 在跑）
 
 ```bash
 cd server
@@ -95,18 +120,30 @@ python e2e_smoke.py
 
 ```
 === POST /api/generate (prefer_path=draft) ===
-200 {"job_id": "...", "path": "draft", ...}
+200 {"jobId": "...", "path": "draft", ...}
 === POST /api/generate (prefer_path=ffmpeg) ===
-200 {"job_id": "...", "path": "ffmpeg", ...}
+200 {"jobId": "...", "path": "ffmpeg", ...}
 ALL OK
 ```
+
+### 5.5 剪映草稿结构检查
+
+生成 draft zip 后，可请求：
+
+```bash
+curl http://localhost:8000/api/outputs/<name>.draft.zip/inspect
+```
+
+`ok: true` 只表示 zip 结构、草稿 JSON、封面和引用素材齐全；最终兼容性仍需要把
+草稿解压到剪映草稿目录，在剪映客户端打开并导出一段视频确认。
 
 ## 6. 常见问题
 
 | 现象 | 处理 |
 |---|---|
 | 后端起不来：`Form data requires python-multipart` | `pip install python-multipart` |
-| `/api/health` 返回 `ffmpeg_available: false` | 装 ffmpeg 并加到 PATH |
+| `/api/health` 返回 `ffmpegAvailable: false` | 装 ffmpeg 并加到 PATH |
+| `/api/health` 返回 `remotionAvailable: false` | 在 `web/` 下跑 `npm ci` |
 | 前端打开是空白页 | 检查 Vite 是否启动、控制台 404 |
 | 剪映打不开 draft zip | 路径 A 需剪映 6+，且只在 Win/macOS 工作 |
 | 字幕烧录报"drawtext fontfile"错 | 仓库默认走 Noto CJK / 微软雅黑，Linux 需手动装 |

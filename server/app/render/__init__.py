@@ -1,4 +1,4 @@
-"""渲染子包（ffmpeg 兜底）。"""
-from . import ffmpeg
+"""渲染子包。"""
+from . import ffmpeg, remotion
 
-__all__ = ["ffmpeg"]
+__all__ = ["ffmpeg", "remotion"]

@@ -12,6 +12,9 @@
 | `transition` | 两段视频加转场 | `xfade`（fade/wipe/slide 等 7 种） |
 | `color` | 调亮度/对比度/饱和度 | `eq` filter |
 
+`concat` 和 `transition` 默认关闭，并声明 `minVideoInputs`。前端会在上传视频不足时禁用开关；
+生成时会自动把已上传视频 URL 写入工具参数里的 `videos`。
+
 ## 调用链
 
 ```
@@ -78,8 +81,8 @@ ffmpeg 直接合成的 MP4（tools: color, subtitle）
 2. `server/app/tools/registry.py`：`register(X())` 一行
 3. 前端不动 —— `CapabilitiesPanel` 自动从 `/api/tools` 拉 schema 渲染
 
-新 tool 写完后跑一次 `pytest server/tests/ -v`，17 个 case 仍是绿的就说明没破坏现有链路。
+新 tool 写完后跑一次 `pytest server/tests/ -v`，23 个 case 仍是绿的就说明没破坏现有链路。
 
 ## 原则
 
-零新依赖（只调 ffmpeg 子进程）、零大内存（不引入 ML 模型）、零下载（不打包字体/素材）。
+ffmpeg-only 工具保持零新 Python 依赖；Remotion 路径依赖 `web/` 的 Node 依赖和 Remotion CLI。

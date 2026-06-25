@@ -2,7 +2,7 @@
 
 > 输入一句话文案 + 几个素材 → 自动生成可发布的短视频（MP4）。
 
-本仓库用 **Remotion + 自研 FastAPI 后端 + ffmpeg / 剪映双出片路径** 把"一句话"变成视频。
+本仓库用 **Remotion + 自研 FastAPI 后端 + ffmpeg / 剪映草稿** 把"一句话"变成视频。
 代码全部为本项目作者重写，思路参考 [pyJianYingDraft](https://github.com/GuanYixuan/pyJianYingDraft) 与
 [Remotion](https://github.com/remotion-dev/remotion)，详见 [THIRD_PARTY_LICENSES.md](./THIRD_PARTY_LICENSES.md)。
 
@@ -34,10 +34,10 @@
                 │  └──────────────────────────────────────────┘ │
                 └────────────────────┬─────────────────────────┘
                                      │
-              ┌──────────────────────┴───────────────────────┐
-              ▼                                              ▼
-       路径 A：返回 .draft zip                       路径 B：返回 MP4
-       （用户在自己电脑用剪映一键导出）              （服务端 ffmpeg 直接出片）
+              ┌──────────────────────┼───────────────────────┐
+              ▼                      ▼                       ▼
+       路径 A：.draft zip      路径 B：ffmpeg MP4      路径 C：Remotion MP4
+       （剪映打开导出）        （服务端兜底合成）       （复用 web/ 组合渲染）
 ```
 
 **出片调用链**：上游 tool（concat / transition，从用户素材）→ 基线 compose（永远跑）
@@ -59,7 +59,7 @@
 │   │   ├── draft/             # 剪映草稿 JSON 生成器（自研）
 │   │   │   ├── schema.py      #   时间轴数据模型
 │   │   │   └── packaging.py   #   打 zip
-│   │   ├── render/            # ffmpeg 兜底合成
+│   │   ├── render/            # ffmpeg 兜底合成 + Remotion CLI 桥接
 │   │   └── tools/             # BaseTool 架构 + 5 个 tool
 │   │       ├── base.py        #   抽象类
 │   │       ├── registry.py    #   注册表
@@ -68,7 +68,7 @@
 │   │       ├── concat.py      #   拼接
 │   │       ├── transition.py  #   转场
 │   │       └── color.py       #   调色
-│   ├── tests/                 # pytest 单测（17 cases）
+│   ├── tests/                 # pytest 单测（23 cases）
 │   ├── pytest.ini
 │   ├── requirements.txt
 │   ├── smoke_test.py          # 离线单元
@@ -86,7 +86,7 @@
 
 ### 0. 前置环境
 
-- Node.js 20+
+- Node.js 20.19+（或 22.12+）
 - Python 3.10+
 - ffmpeg（路径 B 必需；Windows 可用 `winget install Gyan.FFmpeg`）
 - 剪映 6+（路径 A 必需）
@@ -112,33 +112,35 @@ npm run dev                     # http://localhost:5173
 ### 3. 一句话出片
 
 1. 打开 http://localhost:5173
-2. 输入文案、上传几张素材、选一个模板
-3. 点「生成」→ 后端返回两种产物之一：
-   - `*.draft.zip`：下载 → 解压到剪映草稿目录 → 在剪映里点「导出」
-   - `out.mp4`：直接拿到成片
+2. 输入文案、上传几张素材、选择出片路径
+3. 点「生成」→ 后端返回产物：
+   - `*.draft.zip`：包含草稿 JSON、封面和已上传素材；下载 → 解压到剪映草稿目录 → 在剪映里点「导出」
+   - `*.mp4`：ffmpeg 或 Remotion 直接生成的成片
 
-## 双出片路径的取舍
+## 三条出片路径的取舍
 
-| 维度 | 路径 A：剪映草稿 | 路径 B：ffmpeg 兜底 |
-|---|---|---|
-| 依赖 | 必须本地有剪映 | 纯服务端 |
-| 转场/特效 | 用剪映原生素材库 | 仅基础转场 + 字幕 |
-| 速度 | 慢（要手动点） | 快（全自动） |
-| 默认 | 当剪映可用时优先 | 兜底 |
+| 维度 | 路径 A：剪映草稿 | 路径 B：ffmpeg 兜底 | 路径 C：Remotion |
+|---|---|---|---|
+| 依赖 | 用户本地剪映 | 服务端 ffmpeg | 服务端 Node + web 依赖 |
+| 转场/特效 | 后续由剪映增强 | 基础转场 + 字幕 | 复用 `web/src/remotion` 组合 |
+| 速度 | 慢（要手动点） | 快（全自动） | 中等，首次会下载/启动浏览器 |
+| 适合 | 需要进剪映二次编辑 | 稳定兜底出片 | 预览和成片视觉一致 |
 
 ## 路线图
 
-- [x] 仓库骨架 + 双路径设计
+- [x] 仓库骨架 + 三路径设计
 - [x] Remotion 端：一个「字幕条 + 贴纸 + 渐入」组合（自研 `BaseClip`）
 - [x] server.draft：生成合法 `draft_content.json`，打成 zip
 - [x] server.render：ffmpeg 把视频 + BGM + 字幕烧录合成 MP4
+- [x] server.render：Remotion CLI 复用 `BaseClip` 直接渲染 MP4
+- [x] 剪映草稿 zip：打包素材、封面，并提供 `/api/outputs/{name}/inspect` 结构检查
 - [x] 端到端跑通：`python e2e_smoke.py` 全绿
 - [x] **BaseTool 架构**：所有 ffmpeg-only 能力以 `BaseTool` 子类形式挂到注册表
 - [x] **拼接 / 转场 / 调色 / 字幕样式** 四个工具上线（详见 [docs/CAPABILITIES.md](./docs/CAPABILITIES.md)）
 - [x] 前端能力面板：schema 驱动，新 tool 自动出现
-- [x] **`server/tests/` + pytest**：17 个 case 覆盖 BaseTool / 注册表 / 三个 tool 的真实 ffmpeg 调用
+- [x] **`server/tests/` + pytest**：23 个 case 覆盖 API 字段契约 / BaseTool / 注册表 / draft 打包 / Remotion 命令 / 四个 tool 的真实 ffmpeg 调用
 - [x] **`draft/packaging.py` 重构**：`_zip_draft` 从 routes 挪到独立模块，可复用 + 可测
-- [x] **CI**：`.github/workflows/ci.yml` 跑 pytest 守住新 tool 加入时不出错
+- [x] **CI**：`.github/workflows/ci.yml` 跑后端 pytest、前端 audit 和 build
 - [x] **`docs/RUN.md` 同步**：补 BaseTool 章节 + pytest 使用说明
 
 ## 测试
@@ -146,7 +148,8 @@ npm run dev                     # http://localhost:5173
 ```bash
 cd server
 pip install pytest
-python -m pytest tests/ -v        # 17 passed
+python -m pytest tests/ -v        # 23 passed
+npm --prefix ../web run build     # 前端类型检查 + Vite 构建
 python -m smoke_test              # 离线单元
 python e2e_smoke.py               # 需 uvicorn 先起
 ```

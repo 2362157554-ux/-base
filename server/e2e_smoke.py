@@ -37,6 +37,7 @@ def main() -> int:
     s, b = get("/api/health")
     print(s, b.decode())
     assert s == 200, "health failed"
+    health = json.loads(b)
 
     # ---- 路径 A：草稿 ----
     print("\n=== POST /api/generate (prefer_path=draft) ===")
@@ -53,7 +54,7 @@ def main() -> int:
     out = json.loads(b)
     print(s, json.dumps(out, ensure_ascii=False))
     assert s == 200 and out["path"] == "draft", "draft generate failed"
-    artifact_url = out["artifact_url"]
+    artifact_url = out.get("artifactUrl") or out.get("artifact_url")
     s2, b2 = get(artifact_url)
     print(f"  GET {artifact_url} -> {s2} ({len(b2)} bytes)")
     assert s2 == 200 and len(b2) > 100, "artifact download failed"
@@ -81,7 +82,7 @@ def main() -> int:
     out2 = json.loads(b)
     print(s, json.dumps(out2, ensure_ascii=False))
     if s == 200 and out2.get("path") == "ffmpeg":
-        url2 = out2["artifact_url"]
+        url2 = out2.get("artifactUrl") or out2.get("artifact_url")
         s2, b2 = get(url2)
         print(f"  GET {url2} -> {s2} ({len(b2)} bytes)")
         Path("smoke_out.mp4").write_bytes(b2)
@@ -93,6 +94,24 @@ def main() -> int:
             print(f"  WARN: mp4 header looks off: {b2[:12]!r}")
     else:
         print(f"  ffmpeg path not available, skipping: {s} {b[:200]!r}")
+
+    # ---- 路径 C：Remotion（web/node_modules 存在时才跑）----
+    if health.get("remotionAvailable") or health.get("remotion_available"):
+        print("\n=== POST /api/generate (prefer_path=remotion) ===")
+        req3 = dict(req)
+        req3["prefer_path"] = "remotion"
+        req3["text"] = "Remotion 渲染路径\n使用同一个 BaseClip"
+        req3["total_duration_s"] = 1.5
+        s, b = post("/api/generate", req3)
+        out3 = json.loads(b)
+        print(s, json.dumps(out3, ensure_ascii=False))
+        assert s == 200 and out3.get("path") == "remotion", "remotion generate failed"
+        url3 = out3.get("artifactUrl") or out3.get("artifact_url")
+        s3, b3 = get(url3)
+        print(f"  GET {url3} -> {s3} ({len(b3)} bytes)")
+        assert s3 == 200 and len(b3) > 100, "remotion artifact download failed"
+    else:
+        print("\n=== Remotion path skipped: web/node_modules not installed ===")
 
     print("\nALL OK")
     return 0
