@@ -6,6 +6,18 @@
 2. 出片要稳：剪映草稿便于二次编辑，ffmpeg 负责兜底直出，Remotion 负责视觉一致的直出。
 3. 代码全部自有，思路借鉴但不抄袭上游。
 
+## 设计语言契约
+
+根目录 [DESIGN.md](../DESIGN.md) 是 UI 的视觉契约，借鉴 `awesome-design-md` 的组织方式：
+用 token、组件规则、Do/Don't 和响应式规则约束后续改动。它不复制任何品牌设计，而是把
+Runway / Linear / Raycast / Mintlify 等设计文档中适合本项目的模式抽象成「暗色剪辑工作台」。
+
+前端 UI 改动应优先满足：
+
+- 视频预览是主视觉，控制面板只做安静、紧凑的生产工具。
+- 使用暗色 surface ladder、hairline 边框和少量主行动色，不新增装饰性渐变。
+- 能力面板、输入控件和出片操作保持可扫描、可重复使用、移动端不横向溢出。
+
 ## 为什么不用 pyJianYingDraft 直接 vendor
 
 | 方式 | 风险 | 可维护性 |
@@ -59,5 +71,6 @@ pyJianYingDraft 用「持续时长语义」（`trange("0s", "5s")` 表示从 0s 
 - `server/app/render/` —— ffmpeg 合成与 Remotion CLI 桥接，**不依赖剪映**
 - `web/src/remotion/` —— 视觉/动效，既供浏览器预览，也供 Remotion CLI 渲染
 - `web/src/components/` —— 编辑器 UI + 与后端通信
+- `DESIGN.md` —— UI 视觉语言与 AI 设计约束，约束 `web/src/styles.css` 和新增前端组件
 
 任何模块都不应该跨边界去调别的模块的内部 API，**只用 HTTP/文件**。

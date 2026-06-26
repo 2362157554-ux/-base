@@ -6,6 +6,12 @@
 代码全部为本项目作者重写，思路参考 [pyJianYingDraft](https://github.com/GuanYixuan/pyJianYingDraft) 与
 [Remotion](https://github.com/remotion-dev/remotion)，详见 [THIRD_PARTY_LICENSES.md](./THIRD_PARTY_LICENSES.md)。
 
+## 设计语言
+
+本仓库借鉴 `awesome-design-md` 的做法，在根目录新增 [DESIGN.md](./DESIGN.md) 作为 UI 设计契约。
+后续让 AI 或人工继续改前端时，优先遵守其中的暗色剪辑工作台、真实预览优先、紧凑控制面板、
+hairline 边框和单一主行动色规则。
+
 ## 架构
 
 ```
@@ -78,6 +84,7 @@
 │   ├── CAPABILITIES.md        #   能力清单 + 新增流程
 │   └── RUN.md                 #   跑通 + 测试
 ├── .github/workflows/         # CI
+├── DESIGN.md                  # UI 视觉语言与 AI 设计约束
 ├── THIRD_PARTY_LICENSES.md
 └── README.md
 ```
